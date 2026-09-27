@@ -102,6 +102,26 @@ export async function deleteContact(id:string){
   return Boolean(data?.length);
 }
 
+export async function createDeal(input:{contactId:string;title:string;value:number;stage:Deal["stage"]},ownerId:string){
+  if(!supabaseConfigured){
+    const now=new Date().toISOString();
+    const deal:Deal={id:"d-"+crypto.randomUUID(),...input,healthScore:50,updatedAt:now};
+    store.deals.unshift(deal);
+    return deal;
+  }
+  const supabase=await db();
+  const {data,error}=await supabase.from("cf_deals").insert({
+    owner_id:ownerId,
+    contact_id:input.contactId,
+    title:input.title,
+    value:input.value,
+    stage:input.stage,
+    health_score:50
+  }).select("*").single();
+  if(error)throw new Error(error.message);
+  return toDeal(data as DealRow);
+}
+
 export async function listDeals(){
   if(!supabaseConfigured)return store.deals;
   const supabase=await db();
