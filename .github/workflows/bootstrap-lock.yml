@@ -2,7 +2,7 @@ name: Bootstrap npm lockfile
 
 on:
   push:
-    branches: ["phase/4-hardening"]
+    branches: ["main"]
 
 permissions:
   contents: write
