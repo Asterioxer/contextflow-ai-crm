@@ -4,37 +4,57 @@
 
 ContextFlow is an AI-native mini CRM for the Project 5 assessment. Instead of behaving like a contact spreadsheet, it turns relationship context into a usable next action.
 
-## What is implemented
+## Requirements coverage
 
-- Authentication with Supabase Auth in live mode, with deterministic demo mode for reliable assessment playback
-- Contact CRUD with search
-- Relationship profile with notes and interaction timeline
-- Deal pipeline with New, Contacted, Qualified, Won, and Lost stages
-- Native HTML5 drag-and-drop Kanban movement with keyboard-accessible stage selectors
-- Deterministic deal-health/stale attention signals
-- Context-aware AI follow-up drafts with rationale and next action
-- AI generation audit records when Supabase persistence is enabled
-- REST APIs with Zod validation and structured errors
-- Owner-scoped persistence using Supabase RLS
-- GitHub Actions validation on every push and pull request
+| Requirement | Status |
+| --- | --- |
+| Authentication | ✅ Supabase email/password + assessment demo mode |
+| Contact CRUD + search | ✅ |
+| Relationship notes/context | ✅ |
+| Deal pipeline | ✅ New → Contacted → Qualified → Won/Lost |
+| Drag-and-drop Kanban | ✅ Native HTML5 drag/drop + keyboard selector |
+| REST API | ✅ Route Handlers with validation and structured errors |
+| PostgreSQL | ✅ Supabase `cf_` schema with RLS |
+| AI follow-up email | ✅ Gemini-backed, with deterministic fallback |
 
-## Stack
+## Product differentiators
 
-Next.js App Router, React 19, Tailwind CSS, TypeScript, Zod, Supabase Auth/Postgres, Gemini API, and Vercel as the target runtime. The database uses isolated `cf_` tables so ContextFlow does not need to own unrelated application data.
+- Relationship memory: contact notes and interaction timeline are first-class data
+- Next-best-action reasoning is deterministic and explainable
+- AI drafts are human-in-the-loop; the application never sends an email automatically
+- AI generation is auditable when Supabase persistence is enabled
+- CRM text is treated as untrusted data inside the AI prompt to reduce prompt-injection risk
+
+## Stack — target cost: $0
+
+Next.js App Router, React 19, Tailwind CSS, TypeScript, Supabase Free, Gemini API free tier, and Vercel Hobby. See the [Vercel pricing](https://vercel.com/pricing), [Supabase pricing](https://supabase.com/pricing), and [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing) pages for current limits and policies.
+
+Gemini 3.5 Flash-Lite is the default model for the free-tier target configuration.
 
 ## Local setup
 
 1. Copy `.env.example` to `.env.local`
 2. For assessment playback, keep `DEMO_MODE=true` and `NEXT_PUBLIC_DEMO_MODE=true`
-3. For live Supabase auth/data, set `DEMO_MODE=false`, `NEXT_PUBLIC_DEMO_MODE=false`, `NEXT_PUBLIC_SUPABASE_URL`, and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-4. Apply `supabase/schema.sql` to the Supabase SQL editor
-5. Run `npm install` and `npm run dev`
+3. For live auth/data, set `DEMO_MODE=false`, `NEXT_PUBLIC_DEMO_MODE=false`, `NEXT_PUBLIC_SUPABASE_URL`, and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+4. Apply `supabase/schema.sql` in the target Supabase project
+5. Add the target production URL to Supabase Auth redirect URLs when enabling password recovery
+6. Add `GEMINI_API_KEY` to enable live AI; no key is required for deterministic demo generation
+7. Run `npm install` and `npm run dev`
 
-The demo credentials are shown on the login screen. No Gemini key is required for the deterministic fallback. Add `GEMINI_API_KEY` to enable live generation.
+## Production checklist
 
-## Security decisions
+- Import this GitHub repository into a Vercel Hobby project
+- Configure the environment variables from `.env.example` for Production and Preview as appropriate
+- Keep `DEMO_MODE=false` and `NEXT_PUBLIC_DEMO_MODE=false` in live environments
+- Apply `supabase/schema.sql` once to the dedicated ContextFlow database
+- Verify `/api/health` returns `status: ok`
+- Verify signup, sign-in, sign-out, password recovery, contact CRUD, deal drag/drop, activity logging, and AI draft generation
+- Keep `GEMINI_API_KEY` server-side; never expose it through `NEXT_PUBLIC_*`
+- Rotate keys if they are ever committed or exposed
 
-Supabase sessions use the Next.js 16 `proxy.ts` flow and server-side `getClaims()`. Browser code only uses the publishable key. Row Level Security scopes every ContextFlow table to `auth.uid() = owner_id`. The AI is draft-only and never sends an email automatically. Input payloads are validated before mutations.
+## Security
+
+Supabase SSR follows the current Next.js proxy/session pattern and uses `getClaims()` for protected server-side checks. Browser code receives only the publishable key. Every ContextFlow table has Row Level Security scoped to the authenticated owner. API inputs are validated with Zod. Security headers are set in `next.config.ts`. See `SECURITY.md` for the threat model and operational controls.
 
 ## Architecture
 
@@ -46,14 +66,25 @@ Browser
           -> Gemini API (server-side, optional)
 ```
 
-## Project structure
+## Key routes
 
-- `src/app` — Next.js pages and REST route handlers
-- `src/lib/repository.ts` — persistence abstraction with demo fallback
-- `src/lib/supabase` — browser/server/proxy Supabase clients
-- `supabase/schema.sql` — RLS-protected ContextFlow database schema
-- `tests/` — core deterministic checks
+- `/login` — sign-in/sign-up/demo access
+- `/forgot-password` — live Supabase password recovery
+- `/auth/update-password` — secure password reset target
+- `/dashboard` — CRM workspace
+- `GET /api/health` — deployment health signal
+- `GET/POST /api/v1/contacts` — list/create contacts
+- `GET/PATCH/DELETE /api/v1/contacts/:id` — contact management
+- `POST /api/v1/contacts/:id/activities` — interaction logging
+- `GET/POST /api/v1/deals` — deal listing/creation
+- `PATCH /api/v1/deals/:id` — stage/value updates
+- `POST /api/v1/ai/follow-up` — contextual draft generation
+- `POST /api/v1/ai/next-action` — deterministic next-action analysis
 
 ## Demo story
 
-Open the dashboard, inspect a relationship, edit its notes, move a deal between stages, and generate a follow-up. The key product moment is that the AI draft is grounded in relationship memory and current deal context rather than a generic email prompt.
+Open the dashboard, inspect a relationship, edit its notes, log an interaction, create or move a deal, and generate a follow-up. The product moment is that the AI draft is grounded in relationship memory and current deal context rather than a generic email prompt.
+
+## Verified engineering state
+
+The repository uses GitHub Actions to run dependency installation, lint, tests, and a production build. The latest validated phase completed all four successfully before merge; subsequent hardening changes are being validated in the current production-readiness PR.

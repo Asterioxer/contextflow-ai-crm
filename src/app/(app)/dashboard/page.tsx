@@ -13,7 +13,11 @@ const labels:Record<DealStage,string>={new:"New",contacted:"Contacted",qualified
 
 type View="dashboard"|"contacts"|"deals";
 type ContactForm={firstName:string;lastName:string;email:string;company:string;title:string;notes:string};
+type DealForm={contactId:string;title:string;value:string;stage:DealStage};
+type ActivityForm={type:"note"|"email"|"call"|"meeting";title:string;description:string;dealId?:string};
 const emptyForm:ContactForm={firstName:"",lastName:"",email:"",company:"",title:"",notes:""};
+const emptyDealForm:DealForm={contactId:"",title:"",value:"",stage:"new"};
+const emptyActivityForm:ActivityForm={type:"note",title:"",description:""};
 
 function NavButton({id,label,Icon,active,onSelect}:{id:View;label:string;Icon:LucideIcon;active:boolean;onSelect:(id:View)=>void}){
   return <button onClick={()=>onSelect(id)} className={"flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold "+(active?"bg-[#efefff] text-[#574ff2]":"text-slate-600 hover:bg-slate-50")}><Icon size={17}/>{label}</button>;
@@ -37,6 +41,11 @@ export default function Dashboard(){
   const [contactForm,setContactForm]=useState<ContactForm>(emptyForm);
   const [editingId,setEditingId]=useState<string|null>(null);
   const [showContactForm,setShowContactForm]=useState(false);
+  const [dealForm,setDealForm]=useState<DealForm>(emptyDealForm);
+  const [showDealForm,setShowDealForm]=useState(false);
+  const [activityForm,setActivityForm]=useState<ActivityForm>(emptyActivityForm);
+  const [showActivityForm,setShowActivityForm]=useState(false);
+  const [nextAction,setNextAction]=useState<{recommendation:string;evidence:string[];attention:boolean}|null>(null);
   const open=deals.filter(d=>d.stage!=="won"&&d.stage!=="lost");
   const pipeline=open.reduce((sum,d)=>sum+d.value,0);
   const filteredContacts=useMemo(()=>contacts.filter(c=>(c.firstName+" "+c.lastName+" "+c.company+" "+c.email).toLowerCase().includes(query.toLowerCase())),[contacts,query]);
@@ -74,10 +83,10 @@ export default function Dashboard(){
     return ()=>{cancelled=true;};
   },[]);
 
-  const handleNav=(id:View)=>{setView(id);setSelected(null);setAi(null);setError("");};
+  const handleNav=(id:View)=>{setView(id);setSelected(null);setAi(null);setNextAction(null);setError("");};
 
   async function openContact(contact:Contact){
-    setSelected(contact);setAi(null);setError("");
+    setSelected(contact);setAi(null);setNextAction(null);setError("");
     try{
       const res=await fetch("/api/v1/contacts/"+contact.id);
       const body=await res.json();
@@ -94,6 +103,51 @@ export default function Dashboard(){
     setEditingId(contact.id);
     setContactForm({firstName:contact.firstName,lastName:contact.lastName,email:contact.email,company:contact.company,title:contact.title,notes:contact.notes});
     setShowContactForm(true);setError("");
+  }
+
+  function startDealCreate(contactId=contacts[0]?.id||""){
+    setDealForm({...emptyDealForm,contactId});setShowDealForm(true);setError("");
+  }
+
+  function startActivityLog(){
+    setActivityForm({...emptyActivityForm,dealId:profileDeals[0]?.id});setShowActivityForm(true);setError("");
+  }
+
+  async function saveDeal(event:FormEvent){
+    event.preventDefault();setBusy(true);setError("");
+    try{
+      const res=await fetch("/api/v1/deals",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...dealForm,value:Number(dealForm.value)})});
+      const body=await res.json();
+      if(!res.ok)throw new Error(body?.error?.message||"Unable to create deal");
+      setDeals(items=>[body.data,...items]);setShowDealForm(false);setDealForm(emptyDealForm);
+      const statsRes=await fetch("/api/v1/dashboard");if(statsRes.ok)setStats((await statsRes.json()).data);
+    }catch(err){setError(err instanceof Error?err.message:"Unable to create deal.");}
+    finally{setBusy(false);}
+  }
+
+  async function saveActivity(event:FormEvent){
+    event.preventDefault();if(!selected)return;
+    setBusy(true);setError("");
+    try{
+      const res=await fetch("/api/v1/contacts/"+selected.id+"/activities",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(activityForm)});
+      const body=await res.json();
+      if(!res.ok)throw new Error(body?.error?.message||"Unable to record interaction");
+      setProfileActivities(items=>[body.data,...items]);setShowActivityForm(false);setActivityForm(emptyActivityForm);
+    }catch(err){setError(err instanceof Error?err.message:"Unable to record interaction.");}
+    finally{setBusy(false);}
+  }
+
+  async function calculateNextAction(){
+    const deal=profileDeals.find(item=>item.stage!=="won"&&item.stage!=="lost")||profileDeals[0];
+    if(!deal)return;
+    setBusy(true);setError("");
+    try{
+      const res=await fetch("/api/v1/ai/next-action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({dealId:deal.id})});
+      const body=await res.json();
+      if(!res.ok)throw new Error(body?.error?.message||"Unable to analyze next action");
+      setNextAction(body.data);
+    }catch(err){setError(err instanceof Error?err.message:"Unable to analyze the next action.");}
+    finally{setBusy(false);}
   }
 
   async function saveContact(event:FormEvent){
@@ -140,7 +194,8 @@ export default function Dashboard(){
       const body=await res.json();
       if(!res.ok)throw new Error(body?.error?.message||"AI generation failed");
       setAi(body.data);
-      setProfileActivities(items=>[{id:"local-"+Date.now(),contactId:contact.id,dealId:body.data.dealId,type:"ai_generation",title:"AI follow-up generated",description:"Draft created for this relationship.",occurredAt:new Date().toISOString()},...items]);
+      const afterRes=await fetch("/api/v1/contacts/"+contact.id);
+      if(afterRes.ok){const after=await afterRes.json();setProfileActivities(after.data.activities);setProfileDeals(after.data.deals);}
     }catch(err){setError(err instanceof Error?err.message:"Unable to generate the follow-up.");}
     finally{setBusy(false);}
   }
@@ -177,6 +232,7 @@ export default function Dashboard(){
         <button onClick={startCreate} className="cf-button cf-primary"><Plus size={16}/> Add contact</button>
       </header>
 
+      <div className="mt-4 flex gap-2 overflow-x-auto lg:hidden">{(["dashboard","contacts","deals"] as View[]).map(id=><button key={id} onClick={()=>handleNav(id)} className={"rounded-xl px-3 py-2 text-xs font-bold whitespace-nowrap "+(view===id?"bg-[#efefff] text-[#574ff2]":"bg-white border border-[#e5e8ee] text-slate-500")}>{id[0].toUpperCase()+id.slice(1)}</button>)}</div>
       {error&&<div className="mt-5 rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm text-rose-700">{error}</div>}
       {loading&&<div className="mt-8 rounded-2xl border border-[#e5e8ee] bg-white p-8 text-sm text-slate-500">Loading workspace…</div>}
 
@@ -206,14 +262,18 @@ export default function Dashboard(){
         </div>
       </section>}
 
-      {!loading&&view==="deals"&&<section className="mt-8"><div className="mb-4 flex items-center gap-2 text-sm text-slate-500"><GripVertical size={16}/> Drag a deal card into another stage, or use the stage selector for keyboard access.</div><div className="grid gap-4 xl:grid-cols-5">{stages.map(stage=><div key={stage} onDragOver={event=>event.preventDefault()} onDrop={()=>{if(draggingId)void move(draggingId,stage)}} className={"min-h-64 rounded-2xl border p-3 transition "+(draggingId?"border-dashed border-[#c9c5ff] bg-[#fbfaff]":"border-[#e5e8ee] bg-[#fafbfc]")}><div className="flex items-center justify-between px-2 pb-2"><div className="text-sm font-bold">{labels[stage]}</div><div className="text-xs text-slate-400">{deals.filter(d=>d.stage===stage).length}</div></div><div className="space-y-3">{deals.filter(d=>d.stage===stage).map(d=>{const c=contacts.find(x=>x.id===d.contactId);return <article key={d.id} draggable onDragStart={()=>setDraggingId(d.id)} onDragEnd={()=>setDraggingId(null)} className={"cf-card cursor-grab p-4 active:cursor-grabbing "+(draggingId===d.id?"opacity-60":"")}><div className="flex items-start gap-2"><GripVertical size={16} className="mt-0.5 shrink-0 text-slate-300"/><div className="min-w-0 flex-1"><div className="text-sm font-bold">{d.title}</div><div className="mt-1 text-xs text-slate-500">{c?.company||"Unknown account"}</div></div></div><div className="mt-3 text-lg font-bold">{money.format(d.value)}</div><div className="mt-2 flex items-center justify-between text-xs"><span className="text-slate-400">Health</span><b>{d.healthScore}%</b></div><div className="mt-1 h-1.5 rounded-full bg-slate-100"><div className="h-1.5 rounded-full bg-[#635bff]" style={{width:d.healthScore+"%"}}/></div><select aria-label={"Move "+d.title} value={d.stage} onChange={e=>void move(d.id,e.target.value as DealStage)} className="cf-input mt-3 py-2 text-xs">{stages.map(option=><option key={option} value={option}>{labels[option]}</option>)}</select></article>})}</div></div>)}</div></section>}
+      {!loading&&view==="deals"&&<section className="mt-8"><div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2 text-sm text-slate-500"><GripVertical size={16}/> Drag a deal card into another stage, or use the stage selector for keyboard access.</div><button onClick={()=>startDealCreate()} className="cf-button cf-primary"><Plus size={16}/> Add deal</button></div><div className="grid gap-4 xl:grid-cols-5">{stages.map(stage=><div key={stage} onDragOver={event=>event.preventDefault()} onDrop={()=>{if(draggingId)void move(draggingId,stage)}} className={"min-h-64 rounded-2xl border p-3 transition "+(draggingId?"border-dashed border-[#c9c5ff] bg-[#fbfaff]":"border-[#e5e8ee] bg-[#fafbfc]")}><div className="flex items-center justify-between px-2 pb-2"><div className="text-sm font-bold">{labels[stage]}</div><div className="text-xs text-slate-400">{deals.filter(d=>d.stage===stage).length}</div></div><div className="space-y-3">{deals.filter(d=>d.stage===stage).map(d=>{const c=contacts.find(x=>x.id===d.contactId);return <article key={d.id} draggable onDragStart={()=>setDraggingId(d.id)} onDragEnd={()=>setDraggingId(null)} className={"cf-card cursor-grab p-4 active:cursor-grabbing "+(draggingId===d.id?"opacity-60":"")}><div className="flex items-start gap-2"><GripVertical size={16} className="mt-0.5 shrink-0 text-slate-300"/><div className="min-w-0 flex-1"><div className="text-sm font-bold">{d.title}</div><div className="mt-1 text-xs text-slate-500">{c?.company||"Unknown account"}</div></div></div><div className="mt-3 text-lg font-bold">{money.format(d.value)}</div><div className="mt-2 flex items-center justify-between text-xs"><span className="text-slate-400">Health</span><b>{d.healthScore}%</b></div><div className="mt-1 h-1.5 rounded-full bg-slate-100"><div className="h-1.5 rounded-full bg-[#635bff]" style={{width:d.healthScore+"%"}}/></div><select aria-label={"Move "+d.title} value={d.stage} onChange={e=>void move(d.id,e.target.value as DealStage)} className="cf-input mt-3 py-2 text-xs">{stages.map(option=><option key={option} value={option}>{labels[option]}</option>)}</select></article>})}</div></div>)}</div></section>}
 
       {selected&&<div className="fixed inset-0 z-40 overflow-auto bg-black/30 p-4 md:p-8" onClick={()=>setSelected(null)}><div className="mx-auto max-w-5xl" onClick={e=>e.stopPropagation()}><div className="cf-card p-6">
         <div className="flex items-center justify-between"><button onClick={()=>setSelected(null)} className="inline-flex items-center gap-2 text-sm font-bold text-slate-500"><X size={16}/> Close</button><div className="flex gap-2"><button onClick={()=>startEdit(selected)} className="cf-button cf-secondary">Edit</button><button disabled={busy} onClick={()=>void deleteSelected()} className="cf-button rounded-xl bg-rose-50 text-rose-700">Delete</button></div></div>
-        <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_380px]"><div><div className="text-xs font-bold uppercase tracking-wide text-[#635bff]">Relationship profile</div><h2 className="mt-2 text-3xl font-bold">{selected.firstName} {selected.lastName}</h2><p className="mt-1 text-slate-500">{selected.title} · {selected.company} · {selected.email}</p><div className="mt-5 rounded-2xl bg-[#fafaff] p-5"><div className="flex items-center gap-2 text-sm font-bold"><UserRound size={16} className="text-[#635bff]"/> Relationship memory</div><p className="mt-2 text-sm leading-6 text-slate-600">{selected.notes||"No relationship notes recorded yet."}</p></div><div className="mt-5 rounded-2xl border border-[#eef0f4] p-5"><div className="flex items-center gap-2 text-sm font-bold"><Activity size={16}/> Timeline</div>{profileActivities.length===0?<div className="mt-4 text-sm text-slate-500">No interactions recorded yet.</div>:profileActivities.map(item=><div key={item.id} className="mt-4 border-l-2 border-[#e1dfff] pl-4"><div className="text-sm font-bold">{item.title}</div><div className="mt-1 text-xs leading-5 text-slate-500">{item.description}</div><div className="mt-1 text-[11px] text-slate-400">{new Date(item.occurredAt).toLocaleString()}</div></div>)}</div></div>
-          <div>{busy?<div className="rounded-2xl bg-[#fafaff] p-5 text-sm text-slate-500">Working…</div>:ai?<div className="rounded-2xl border border-[#ddd9ff] bg-[#fafaff] p-5"><div className="flex items-center gap-2 font-bold"><Sparkles size={16} className="text-[#635bff]"/> AI follow-up <span className="ml-auto text-xs font-medium text-slate-400">{ai.provider}</span></div><h3 className="mt-4 font-bold">{ai.subject}</h3><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-600">{ai.body}</p><div className="mt-4 text-xs font-bold uppercase tracking-wide text-slate-400">Why this draft</div><div className="mt-2 space-y-2 text-xs text-slate-500">{ai.rationale.map(item=><div key={item}>• {item}</div>)}</div><div className="mt-4 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800"><b>Next action:</b> {ai.nextAction}</div></div>:<button onClick={()=>void generate(selected)} className="cf-button cf-primary w-full justify-center"><Sparkles size={16}/> Generate contextual follow-up</button>}{profileDeals.length>0&&<div className="mt-4 rounded-2xl border border-[#eef0f4] p-4"><div className="text-xs font-bold uppercase tracking-wide text-slate-400">Linked deals</div>{profileDeals.map(d=><div key={d.id} className="mt-3 flex items-center justify-between text-sm"><span className="font-semibold">{d.title}</span><span className="text-slate-500">{money.format(d.value)} · {labels[d.stage]}</span></div>)}</div>}</div>
+        <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_380px]"><div><div className="text-xs font-bold uppercase tracking-wide text-[#635bff]">Relationship profile</div><h2 className="mt-2 text-3xl font-bold">{selected.firstName} {selected.lastName}</h2><p className="mt-1 text-slate-500">{selected.title} · {selected.company} · {selected.email}</p><div className="mt-5 rounded-2xl bg-[#fafaff] p-5"><div className="flex items-center gap-2 text-sm font-bold"><UserRound size={16} className="text-[#635bff]"/> Relationship memory</div><p className="mt-2 text-sm leading-6 text-slate-600">{selected.notes||"No relationship notes recorded yet."}</p></div><div className="mt-5 rounded-2xl border border-[#eef0f4] p-5"><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm font-bold"><Activity size={16}/> Timeline</div><button onClick={startActivityLog} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200"><Plus size={13} className="mr-1 inline"/> Log interaction</button></div>{profileActivities.length===0?<div className="mt-4 text-sm text-slate-500">No interactions recorded yet.</div>:profileActivities.map(item=><div key={item.id} className="mt-4 border-l-2 border-[#e1dfff] pl-4"><div className="text-sm font-bold">{item.title}</div><div className="mt-1 text-xs leading-5 text-slate-500">{item.description}</div><div className="mt-1 text-[11px] text-slate-400">{new Date(item.occurredAt).toLocaleString()}</div></div>)}</div></div>
+          <div>{busy?<div className="rounded-2xl bg-[#fafaff] p-5 text-sm text-slate-500">Working…</div>:ai?<div className="rounded-2xl border border-[#ddd9ff] bg-[#fafaff] p-5"><div className="flex items-center gap-2 font-bold"><Sparkles size={16} className="text-[#635bff]"/> AI follow-up <span className="ml-auto text-xs font-medium text-slate-400">{ai.provider}</span></div><h3 className="mt-4 font-bold">{ai.subject}</h3><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-600">{ai.body}</p><div className="mt-4 text-xs font-bold uppercase tracking-wide text-slate-400">Why this draft</div><div className="mt-2 space-y-2 text-xs text-slate-500">{ai.rationale.map(item=><div key={item}>• {item}</div>)}</div><div className="mt-4 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800"><b>Next action:</b> {ai.nextAction}</div></div>:<div className="space-y-3"><button onClick={()=>void generate(selected)} className="cf-button cf-primary w-full justify-center"><Sparkles size={16}/> Generate contextual follow-up</button>{profileDeals.length>0&&<button onClick={()=>void calculateNextAction()} className="cf-button cf-secondary w-full justify-center"><Target size={16}/> Analyze next best action</button>}{nextAction&&<div className={"rounded-2xl p-4 "+(nextAction.attention?"bg-amber-50":"bg-emerald-50")}><div className={"text-sm font-bold "+(nextAction.attention?"text-amber-800":"text-emerald-800")}>{nextAction.attention?"Attention needed":"Cadence looks healthy"}</div><p className={"mt-2 text-sm "+(nextAction.attention?"text-amber-700":"text-emerald-700")}>{nextAction.recommendation}</p><div className="mt-3 space-y-1 text-xs text-slate-500">{nextAction.evidence.map(item=><div key={item}>• {item}</div>)}</div></div>}</div>}{profileDeals.length>0&&<div className="mt-4 rounded-2xl border border-[#eef0f4] p-4"><div className="text-xs font-bold uppercase tracking-wide text-slate-400">Linked deals</div>{profileDeals.map(d=><div key={d.id} className="mt-3 flex items-center justify-between text-sm"><span className="font-semibold">{d.title}</span><span className="text-slate-500">{money.format(d.value)} · {labels[d.stage]}</span></div>)}</div>}</div>
         </div>
       </div></div></div>}
+
+      {showDealForm&&<div className="fixed inset-0 z-50 overflow-auto bg-black/30 p-4 md:p-8" onClick={()=>setShowDealForm(false)}><div className="mx-auto max-w-2xl" onClick={e=>e.stopPropagation()}><form onSubmit={saveDeal} className="cf-card p-6"><div className="flex items-center justify-between"><div><div className="text-xs font-bold uppercase tracking-wide text-[#635bff]">Create deal</div><h2 className="mt-1 text-2xl font-bold">Add opportunity</h2></div><button type="button" onClick={()=>setShowDealForm(false)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={18}/></button></div><div className="mt-6 grid gap-4 sm:grid-cols-2"><label className="text-sm font-semibold sm:col-span-2">Contact<select required className="cf-input mt-2" value={dealForm.contactId} onChange={e=>setDealForm(form=>({...form,contactId:e.target.value}))}><option value="">Select a contact</option>{contacts.map(contact=><option key={contact.id} value={contact.id}>{contact.firstName} {contact.lastName} · {contact.company}</option>)}</select></label><label className="text-sm font-semibold">Deal title<input required className="cf-input mt-2" value={dealForm.title} onChange={e=>setDealForm(form=>({...form,title:e.target.value}))} placeholder="Enterprise rollout"/></label><label className="text-sm font-semibold">Value (INR)<input required min="0" step="1" inputMode="numeric" className="cf-input mt-2" value={dealForm.value} onChange={e=>setDealForm(form=>({...form,value:e.target.value}))} placeholder="85000"/></label><label className="text-sm font-semibold sm:col-span-2">Stage<select className="cf-input mt-2" value={dealForm.stage} onChange={e=>setDealForm(form=>({...form,stage:e.target.value as DealStage}))}>{stages.map(stage=><option key={stage} value={stage}>{labels[stage]}</option>)}</select></label></div><div className="mt-6 flex justify-end gap-2"><button type="button" onClick={()=>setShowDealForm(false)} className="cf-button cf-secondary">Cancel</button><button disabled={busy} className="cf-button cf-primary">{busy?"Creating…":"Create deal"}</button></div></form></div></div>}
+
+      {showActivityForm&&<div className="fixed inset-0 z-50 overflow-auto bg-black/30 p-4 md:p-8" onClick={()=>setShowActivityForm(false)}><div className="mx-auto max-w-2xl" onClick={e=>e.stopPropagation()}><form onSubmit={saveActivity} className="cf-card p-6"><div className="flex items-center justify-between"><div><div className="text-xs font-bold uppercase tracking-wide text-[#635bff]">Relationship timeline</div><h2 className="mt-1 text-2xl font-bold">Log interaction</h2></div><button type="button" onClick={()=>setShowActivityForm(false)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={18}/></button></div><div className="mt-6 grid gap-4 sm:grid-cols-2"><label className="text-sm font-semibold">Type<select className="cf-input mt-2" value={activityForm.type} onChange={e=>setActivityForm(form=>({...form,type:e.target.value as ActivityForm["type"]}))}>{["note","email","call","meeting"].map(type=><option key={type} value={type}>{type[0].toUpperCase()+type.slice(1)}</option>)}</select></label><label className="text-sm font-semibold">Linked deal<select className="cf-input mt-2" value={activityForm.dealId||""} onChange={e=>setActivityForm(form=>({...form,dealId:e.target.value||undefined}))}><option value="">No linked deal</option>{profileDeals.map(deal=><option key={deal.id} value={deal.id}>{deal.title}</option>)}</select></label></div><label className="mt-4 block text-sm font-semibold">Title<input required className="cf-input mt-2" value={activityForm.title} onChange={e=>setActivityForm(form=>({...form,title:e.target.value}))} placeholder="Security review discussed"/></label><label className="mt-4 block text-sm font-semibold">Details<textarea className="cf-input mt-2 min-h-28" value={activityForm.description} onChange={e=>setActivityForm(form=>({...form,description:e.target.value}))} placeholder="Capture the useful context for next time…"/></label><div className="mt-6 flex justify-end gap-2"><button type="button" onClick={()=>setShowActivityForm(false)} className="cf-button cf-secondary">Cancel</button><button disabled={busy} className="cf-button cf-primary">{busy?"Saving…":"Log interaction"}</button></div></form></div></div>}
 
       {showContactForm&&<div className="fixed inset-0 z-50 overflow-auto bg-black/30 p-4 md:p-8" onClick={()=>setShowContactForm(false)}><div className="mx-auto max-w-2xl" onClick={e=>e.stopPropagation()}><form onSubmit={saveContact} className="cf-card p-6"><div className="flex items-center justify-between"><div><div className="text-xs font-bold uppercase tracking-wide text-[#635bff]">{editingId?"Edit":"Create"} contact</div><h2 className="mt-1 text-2xl font-bold">{editingId?"Update relationship":"Add a relationship"}</h2></div><button type="button" onClick={()=>setShowContactForm(false)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={18}/></button></div><div className="mt-6 grid gap-4 sm:grid-cols-2">{(["firstName","lastName","email","company","title"] as const).map(field=><label key={field} className="block text-sm font-semibold">{field==="firstName"?"First name":field==="lastName"?"Last name":field[0].toUpperCase()+field.slice(1)}<input required className="cf-input mt-2" type={field==="email"?"email":"text"} value={contactForm[field]} onChange={e=>setContactForm(form=>({...form,[field]:e.target.value}))}/></label>)}</div><label className="mt-4 block text-sm font-semibold">Notes<textarea className="cf-input mt-2 min-h-32" value={contactForm.notes} onChange={e=>setContactForm(form=>({...form,notes:e.target.value}))} placeholder="What should ContextFlow remember about this relationship?"/></label><div className="mt-6 flex justify-end gap-2"><button type="button" onClick={()=>setShowContactForm(false)} className="cf-button cf-secondary">Cancel</button><button disabled={busy} className="cf-button cf-primary">{busy?"Saving…":editingId?"Save changes":"Create contact"}</button></div></form></div></div>}
     </div></main>
