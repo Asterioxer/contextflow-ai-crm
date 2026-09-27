@@ -95,7 +95,8 @@ create policy "cf_activities_own" on public.cf_activities for all to authenticat
 create policy "cf_ai_generations_own" on public.cf_ai_generations for all to authenticated using((select auth.uid())=owner_id) with check((select auth.uid())=owner_id);
 
 create index if not exists cf_contacts_owner_idx on public.cf_contacts(owner_id);
-create index if not exists cf_contacts_email_idx on public.cf_contacts(owner_id,lower(email));
+drop index if exists public.cf_contacts_email_idx;
+create unique index if not exists cf_contacts_email_idx on public.cf_contacts(owner_id,lower(email));
 create index if not exists cf_deals_owner_idx on public.cf_deals(owner_id);
 create index if not exists cf_deals_stage_idx on public.cf_deals(owner_id,stage);
 create index if not exists cf_activities_contact_idx on public.cf_activities(owner_id,contact_id,occurred_at desc);
