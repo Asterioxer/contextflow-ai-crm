@@ -56,11 +56,35 @@ create table if not exists public.cf_ai_generations(
  created_at timestamptz not null default now()
 );
 
+create or replace function public.cf_touch_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at=now();
+  return new;
+end;
+$$;
+
+drop trigger if exists cf_contacts_touch on public.cf_contacts;
+create trigger cf_contacts_touch before update on public.cf_contacts for each row execute function public.cf_touch_updated_at();
+
+drop trigger if exists cf_deals_touch on public.cf_deals;
+create trigger cf_deals_touch before update on public.cf_deals for each row execute function public.cf_touch_updated_at();
+
 alter table public.cf_profiles enable row level security;
 alter table public.cf_contacts enable row level security;
 alter table public.cf_deals enable row level security;
 alter table public.cf_activities enable row level security;
 alter table public.cf_ai_generations enable row level security;
+
+drop policy if exists "cf_profiles_select_own" on public.cf_profiles;
+drop policy if exists "cf_profiles_insert_own" on public.cf_profiles;
+drop policy if exists "cf_profiles_update_own" on public.cf_profiles;
+drop policy if exists "cf_contacts_own" on public.cf_contacts;
+drop policy if exists "cf_deals_own" on public.cf_deals;
+drop policy if exists "cf_activities_own" on public.cf_activities;
+drop policy if exists "cf_ai_generations_own" on public.cf_ai_generations;
 
 create policy "cf_profiles_select_own" on public.cf_profiles for select to authenticated using((select auth.uid())=id);
 create policy "cf_profiles_insert_own" on public.cf_profiles for insert to authenticated with check((select auth.uid())=id);
