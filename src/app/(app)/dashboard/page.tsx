@@ -4,6 +4,7 @@ import {useEffect,useMemo,useState} from "react";
 import type {FormEvent} from "react";
 import {Activity,ArrowRight,BarChart3,Bot,BriefcaseBusiness,ContactRound,GripVertical,LogOut,Plus,Search,Sparkles,Target,UserRound,X} from "lucide-react";
 import type {LucideIcon} from "lucide-react";
+import {useRouter} from "next/navigation";
 import type {Activity as ActivityModel,Contact,Deal,DealStage} from "@/lib/types";
 
 const money=new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:0});
@@ -19,6 +20,7 @@ function NavButton({id,label,Icon,active,onSelect}:{id:View;label:string;Icon:Lu
 }
 
 export default function Dashboard(){
+  const router=useRouter();
   const [view,setView]=useState<View>("dashboard");
   const [query,setQuery]=useState("");
   const [contacts,setContacts]=useState<Contact[]>([]);
@@ -54,7 +56,23 @@ export default function Dashboard(){
     finally{setLoading(false);}
   }
 
-  useEffect(()=>{void loadWorkspace();},[]);
+  useEffect(()=>{
+    let cancelled=false;
+    const run=async()=>{
+      try{
+        const [contactsRes,dealsRes,statsRes]=await Promise.all([fetch("/api/v1/contacts"),fetch("/api/v1/deals"),fetch("/api/v1/dashboard")]);
+        if(!contactsRes.ok||!dealsRes.ok||!statsRes.ok)throw new Error();
+        const [contactsBody,dealsBody,statsBody]=await Promise.all([contactsRes.json(),dealsRes.json(),statsRes.json()]);
+        if(!cancelled){setContacts(contactsBody.data);setDeals(dealsBody.data);setStats(statsBody.data);}
+      }catch{
+        if(!cancelled)setError("We could not load your workspace. Refresh and try again.");
+      }finally{
+        if(!cancelled)setLoading(false);
+      }
+    };
+    void run();
+    return ()=>{cancelled=true;};
+  },[]);
 
   const handleNav=(id:View)=>{setView(id);setSelected(null);setAi(null);setError("");};
 
@@ -143,7 +161,7 @@ export default function Dashboard(){
 
   async function signOut(){
     await fetch("/api/auth/signout",{method:"POST"}).catch(()=>undefined);
-    window.location.href="/login";
+    router.push("/login");
   }
 
   return <div className="flex min-h-screen">
