@@ -16,11 +16,12 @@ export default function Login(){
   const [notice,setNotice]=useState("");
   const router=useRouter();
   const demoEnabled=process.env.NEXT_PUBLIC_DEMO_MODE!=="false";
+  const liveAuthEnabled=supabaseConfigured&&process.env.NEXT_PUBLIC_DEMO_MODE==="false";
 
   async function submit(event:FormEvent){
     event.preventDefault();setBusy(true);setError("");setNotice("");
     try{
-      if(supabaseConfigured){
+      if(liveAuthEnabled){
         const supabase=createClient();
         if(mode==="signin"){
           const {error:authError}=await supabase.auth.signInWithPassword({email,password});
@@ -43,7 +44,7 @@ export default function Login(){
   return <div className="flex min-h-screen items-center justify-center p-6"><div className="grid w-full max-w-4xl overflow-hidden rounded-3xl border border-[#e5e8ee] bg-white shadow-xl md:grid-cols-2">
     <div className="hidden bg-[#17181d] p-12 text-white md:block"><div className="flex items-center gap-3"><div className="flex size-9 items-center justify-center rounded-xl bg-[#635bff]"><Sparkles size={17}/></div><b>ContextFlow</b></div><div className="mt-24 text-4xl font-bold leading-tight">Remember the relationship, not just the contact.</div><p className="mt-5 text-slate-300">A focused CRM with relationship memory, deal health, and an AI follow-up copilot.</p></div>
     <form onSubmit={submit} className="p-8 sm:p-12"><div className="mb-8 flex items-center gap-3 md:hidden"><div className="flex size-9 items-center justify-center rounded-xl bg-[#635bff] text-white"><Sparkles size={17}/></div><b>ContextFlow</b></div>
-      <h1 className="text-2xl font-bold">{mode==="signin"?"Welcome back":"Create your workspace"}</h1><p className="mt-2 text-sm text-slate-500">{supabaseConfigured?"Supabase Auth is connected.":"Demo mode is available for assessment playback."}</p>
+      <h1 className="text-2xl font-bold">{mode==="signin"?"Welcome back":"Create your workspace"}</h1><p className="mt-2 text-sm text-slate-500">{liveAuthEnabled?"Supabase Auth is connected.":"Demo mode is available for assessment playback."}</p>
       <div className="mt-6 grid grid-cols-2 rounded-xl bg-slate-100 p-1 text-sm font-bold"><button type="button" onClick={()=>setMode("signin")} className={"rounded-lg px-3 py-2 "+(mode==="signin"?"bg-white shadow-sm":"text-slate-500")}>Sign in</button><button type="button" onClick={()=>setMode("signup")} className={"rounded-lg px-3 py-2 "+(mode==="signup"?"bg-white shadow-sm":"text-slate-500")}>Sign up</button></div>
       <label className="mt-6 block text-sm font-semibold">Email</label><input required className="cf-input mt-2" value={email} onChange={e=>setEmail(e.target.value)} type="email" placeholder="you@example.com"/>
       <label className="mt-5 block text-sm font-semibold">Password</label><input required minLength={6} className="cf-input mt-2" value={password} onChange={e=>setPassword(e.target.value)} type="password" placeholder="At least 6 characters"/>
