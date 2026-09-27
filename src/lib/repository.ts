@@ -110,6 +110,9 @@ export async function createDeal(input:{contactId:string;title:string;value:numb
     return deal;
   }
   const supabase=await db();
+  const {data:contact,error:contactError}=await supabase.from("cf_contacts").select("id").eq("id",input.contactId).maybeSingle();
+  if(contactError)throw new Error(contactError.message);
+  if(!contact)throw new Error("Contact does not exist or is not accessible.");
   const {data,error}=await supabase.from("cf_deals").insert({
     owner_id:ownerId,
     contact_id:input.contactId,
