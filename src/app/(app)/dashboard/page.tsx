@@ -1,7 +1,8 @@
 "use client";
 import {useMemo,useState} from "react";
 import {Activity,ArrowRight,BarChart3,Bot,BriefcaseBusiness,ContactRound,LogOut,Plus,Search,Sparkles,Target,UserRound} from "lucide-react";
-import {store,type Contact,type DealStage} from "@/lib/store";
+import {store} from "@/lib/store";
+import type {Contact,DealStage} from "@/lib/types";
 
 const money=new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:0});
 const stages:DealStage[]=["new","contacted","qualified","won","lost"];
