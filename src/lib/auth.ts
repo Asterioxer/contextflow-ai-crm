@@ -10,7 +10,8 @@ export interface AuthUser{
 export async function getAuthUser():Promise<AuthUser|null>{
   if(supabaseConfigured&&process.env.DEMO_MODE==="false"){
     const supabase=await createSupabaseServerClient();
-    const {data:{claims}}=await supabase.auth.getClaims();
+    const {data}=await supabase.auth.getClaims();
+    const claims=data?.claims;
     if(claims?.sub)return {id:String(claims.sub),email:typeof claims.email==="string"?claims.email:undefined};
   }
 
