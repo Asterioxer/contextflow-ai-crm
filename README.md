@@ -27,9 +27,9 @@ ContextFlow is an AI-native mini CRM for the Project 5 assessment. Instead of be
 
 ## Stack — target cost: $0
 
-Next.js App Router, React 19, Tailwind CSS, TypeScript, Supabase Free, Gemini API free tier, and Vercel Hobby. Vercel's current Hobby plan is $0/month, and Supabase's current Free plan is $0/month with 500 MB database capacity; Supabase also limits Free organizations to two active projects. citehttps://vercel.com/pricing
+Next.js App Router, React 19, Tailwind CSS, TypeScript, Supabase Free, Gemini API free tier, and Vercel Hobby. See the [Vercel pricing](https://vercel.com/pricing), [Supabase pricing](https://supabase.com/pricing), and [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing) pages for current limits and policies.
 
-Gemini 3.5 Flash-Lite is used by default because Google's current pricing page lists its standard input/output prices as free on the Free Tier. citehttps://ai.google.dev/gemini-api/docs/pricing
+Gemini 3.5 Flash-Lite is the default model for the free-tier target configuration.
 
 ## Local setup
 
