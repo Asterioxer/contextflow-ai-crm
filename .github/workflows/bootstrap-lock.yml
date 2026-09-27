@@ -9,24 +9,36 @@ permissions:
 
 jobs:
   bootstrap:
-    if: ${{ hashFiles('package-lock.json') == '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Generate lockfile
-        run: npm install --package-lock-only --ignore-scripts
+      - name: Generate lockfile when missing
+        id: lock
+        shell: bash
+        run: |
+          if [ -f package-lock.json ]; then
+            echo "created=false" >> "$GITHUB_OUTPUT"
+          else
+            npm install --package-lock-only --ignore-scripts
+            echo "created=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Install from lockfile
+        if: steps.lock.outputs.created == 'true'
         run: npm ci
       - name: Lint
+        if: steps.lock.outputs.created == 'true'
         run: npm run lint
       - name: Test
+        if: steps.lock.outputs.created == 'true'
         run: npm test
       - name: Build
+        if: steps.lock.outputs.created == 'true'
         run: npm run build
       - name: Commit lockfile and remove bootstrap workflow
+        if: steps.lock.outputs.created == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
