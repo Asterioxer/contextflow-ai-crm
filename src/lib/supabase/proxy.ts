@@ -18,8 +18,8 @@ export async function updateSession(request:NextRequest){
     }
   });
 
-  const {data:{claims}}=await supabase.auth.getClaims();
-  if(!claims&&request.nextUrl.pathname.startsWith("/dashboard")){
+  const {data}=await supabase.auth.getClaims();
+  if(!data?.claims&&request.nextUrl.pathname.startsWith("/dashboard")){
     const url=new URL("/login",request.url);
     url.searchParams.set("next",request.nextUrl.pathname);
     return NextResponse.redirect(url);
