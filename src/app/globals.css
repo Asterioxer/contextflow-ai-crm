@@ -1,0 +1,6 @@
+@import "tailwindcss";
+:root{--bg:#f6f7fb;--surface:#fff;--ink:#15171c;--muted:#707784;--border:#e5e8ee;--accent:#635bff}
+*{box-sizing:border-box}html{background:var(--bg)}body{margin:0;background:var(--bg);color:var(--ink);font-family:Arial,Helvetica,sans-serif}button,input,textarea,select{font:inherit}a{text-decoration:none;color:inherit}
+.cf-card{background:#fff;border:1px solid var(--border);border-radius:18px;box-shadow:0 10px 30px rgba(20,24,40,.04)}
+.cf-input{width:100%;border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:#fff;outline:0}.cf-input:focus{border-color:#aaa4ff;box-shadow:0 0 0 3px rgba(99,91,255,.12)}
+.cf-button{border:0;border-radius:12px;padding:10px 14px;display:inline-flex;align-items:center;gap:8px;font-weight:700;cursor:pointer}.cf-primary{background:var(--accent);color:#fff}.cf-secondary{background:#f0f1f5;color:#30343b}
