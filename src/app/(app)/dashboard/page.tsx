@@ -9,6 +9,10 @@ const stages:DealStage[]=["new","contacted","qualified","won","lost"];
 const labels:Record<DealStage,string>={new:"New",contacted:"Contacted",qualified:"Qualified",won:"Won",lost:"Lost"};
 const daysSince=(iso:string)=>Math.floor((Date.now()-new Date(iso).getTime())/86400000);
 
+function NavButton({id,label,Icon,active,onSelect}:{id:"dashboard"|"contacts"|"deals";label:string;Icon:typeof BarChart3;active:boolean;onSelect:(id:"dashboard"|"contacts"|"deals")=>void}){
+  return <button onClick={()=>onSelect(id)} className={"flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold "+(active?"bg-[#efefff] text-[#574ff2]":"text-slate-600 hover:bg-slate-50")}><Icon size={17}/>{label}</button>
+}
+
 export default function Dashboard(){
   const [view,setView]=useState<"dashboard"|"contacts"|"deals">("dashboard");
   const [query,setQuery]=useState("");
@@ -34,14 +38,12 @@ export default function Dashboard(){
     catch{setDealState(previous)}
   }
 
-  function NavButton({id,label,Icon}:{id:"dashboard"|"contacts"|"deals";label:string;Icon:typeof BarChart3}){
-    return <button onClick={()=>{setView(id);setSelected(null);setAi(null)}} className={"flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold "+(view===id?"bg-[#efefff] text-[#574ff2]":"text-slate-600 hover:bg-slate-50")}><Icon size={17}/>{label}</button>
-  }
+  const handleNav=(id:"dashboard"|"contacts"|"deals")=>{setView(id);setSelected(null);setAi(null)};
 
   return <div className="flex min-h-screen">
     <aside className="hidden w-60 shrink-0 border-r border-[#e5e8ee] bg-white lg:flex lg:flex-col">
       <div className="flex h-20 items-center gap-3 px-6"><div className="flex size-9 items-center justify-center rounded-xl bg-[#635bff] text-white"><Sparkles size={17}/></div><div><div className="font-bold">ContextFlow</div><div className="text-xs text-slate-400">AI-native CRM</div></div></div>
-      <nav className="flex-1 space-y-1 px-3 py-4"><NavButton id="dashboard" label="Dashboard" Icon={BarChart3}/><NavButton id="contacts" label="Contacts" Icon={ContactRound}/><NavButton id="deals" label="Deals" Icon={BriefcaseBusiness}/></nav>
+      <nav className="flex-1 space-y-1 px-3 py-4"><NavButton id="dashboard" label="Dashboard" Icon={BarChart3} active={view==="dashboard"} onSelect={handleNav}/><NavButton id="contacts" label="Contacts" Icon={ContactRound} active={view==="contacts"} onSelect={handleNav}/><NavButton id="deals" label="Deals" Icon={BriefcaseBusiness} active={view==="deals"} onSelect={handleNav}/></nav>
       <a href="/login" className="border-t border-[#e5e8ee] p-4 text-sm text-slate-500"><LogOut size={16} className="mr-2 inline"/>Sign out</a>
     </aside>
 
