@@ -16,10 +16,12 @@ ContextFlow is an AI-native mini CRM for the Project 5 assessment. Instead of be
 | REST API | ✅ Route Handlers with validation and structured errors |
 | PostgreSQL | ✅ Supabase `cf_` schema with RLS |
 | AI follow-up email | ✅ Gemini-backed, with deterministic fallback |
+| Relationship intelligence | ✅ Deterministic health, momentum, risk and next-action analysis |
 
 ## Product differentiators
 
 - Relationship memory: contact notes and interaction timeline are first-class data
+- Relationship intelligence: a measurable 0–100 score combines engagement, deal stage, deal health and recency
 - Next-best-action reasoning is deterministic and explainable
 - AI drafts are human-in-the-loop; the application never sends an email automatically
 - AI generation is auditable when Supabase persistence is enabled
@@ -48,7 +50,7 @@ Gemini 3.5 Flash-Lite is the default model for the free-tier target configuratio
 - Keep `DEMO_MODE=false` and `NEXT_PUBLIC_DEMO_MODE=false` in live environments
 - Apply `supabase/schema.sql` once to the dedicated ContextFlow database
 - Verify `/api/health` returns `status: ok`
-- Verify signup, sign-in, sign-out, password recovery, contact CRUD, deal drag/drop, activity logging, and AI draft generation
+- Verify signup, sign-in, sign-out, password recovery, contact CRUD, deal drag/drop, activity logging, AI draft generation, and relationship intelligence
 - Keep `GEMINI_API_KEY` server-side; never expose it through `NEXT_PUBLIC_*`
 - Rotate keys if they are ever committed or exposed
 
@@ -63,6 +65,7 @@ Browser
   -> Next.js / Vercel
       -> Route Handlers
           -> Supabase Auth + PostgreSQL
+          -> Relationship Intelligence
           -> Gemini API (server-side, optional)
 ```
 
@@ -80,11 +83,12 @@ Browser
 - `PATCH /api/v1/deals/:id` — stage/value updates
 - `POST /api/v1/ai/follow-up` — contextual draft generation
 - `POST /api/v1/ai/next-action` — deterministic next-action analysis
+- `POST /api/v1/ai/relationship-summary` — relationship health, momentum, risks, signals and next actions
 
 ## Demo story
 
-Open the dashboard, inspect a relationship, edit its notes, log an interaction, create or move a deal, and generate a follow-up. The product moment is that the AI draft is grounded in relationship memory and current deal context rather than a generic email prompt.
+Open the dashboard, inspect a relationship, edit its notes, log an interaction, create or move a deal, generate a follow-up, and inspect relationship intelligence. The product moment is that the system can explain **why** a relationship needs attention instead of presenting an unexplained AI score.
 
 ## Verified engineering state
 
-The repository uses GitHub Actions to run dependency installation, lint, tests, and a production build. The latest validated phase completed all four successfully before merge; subsequent hardening changes are being validated in the current production-readiness PR.
+The repository uses GitHub Actions to run dependency installation, lint, tests, and a production build. Phase 6 adds pure unit coverage for healthy, stale and missing-context relationship scenarios.
