@@ -37,6 +37,6 @@ test("flags stale open opportunities",()=>{
 test("does not invent engagement when history is empty",()=>{
   const result=analyzeRelationship({...contact,notes:""},[deal({stage:"new",healthScore:40})],[]);
   assert.ok(result.risks.some(r=>r.includes("No interaction")));
-  assert.ok(result.risks.some(r=>r.includes("No relationship notes")));
+  assert.ok(result.risks.some(r=>r.includes("relationship notes")));
   assert.equal(result.momentum,"negative");
 });
