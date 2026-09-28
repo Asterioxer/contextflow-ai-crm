@@ -61,5 +61,5 @@ export function analyzeRelationship(
         ? contact.firstName+" needs attention: the relationship has useful signals but the current cadence or opportunity progression is uneven."
         : contact.firstName+" is at risk of going cold; the available CRM history shows insufficient recent engagement or weak opportunity signals.";
 
-  return {score,status,momentum,summary,risks:[...new Set(risks)].slice(0,4),signals:[...new Set(signals)].slice(0,5),nextActions:[...new Set(nextActions)].slice(0,3)};
+  return {score,status,momentum,summary,risks:[...new Set(risks)].slice(0,5),signals:[...new Set(signals)].slice(0,5),nextActions:[...new Set(nextActions)].slice(0,3)};
 }
