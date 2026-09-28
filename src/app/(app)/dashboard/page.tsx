@@ -2,10 +2,13 @@
 
 import {useEffect,useMemo,useState} from "react";
 import type {FormEvent} from "react";
-import {Activity,ArrowRight,BarChart3,Bot,BriefcaseBusiness,ContactRound,GripVertical,LogOut,Plus,Search,Sparkles,Target,UserRound,X} from "lucide-react";
+import {Activity,AlertTriangle,ArrowRight,BarChart3,Bot,BriefcaseBusiness,ContactRound,GripVertical,LogOut,Plus,Search,Sparkles,Target,UserRound,X} from "lucide-react";
 import type {LucideIcon} from "lucide-react";
 import {useRouter} from "next/navigation";
 import type {Activity as ActivityModel,Contact,Deal,DealStage} from "@/lib/types";
+import type {AccountBriefing} from "@/lib/account-briefing";
+import type {AiAlert} from "@/lib/ai-alerts";
+import type {RelationshipIntelligence} from "@/lib/relationship-intelligence";
 
 const money=new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:0});
 const stages:DealStage[]=["new","contacted","qualified","won","lost"];
@@ -46,6 +49,9 @@ export default function Dashboard(){
   const [activityForm,setActivityForm]=useState<ActivityForm>(emptyActivityForm);
   const [showActivityForm,setShowActivityForm]=useState(false);
   const [nextAction,setNextAction]=useState<{recommendation:string;evidence:string[];attention:boolean}|null>(null);
+  const [briefing,setBriefing]=useState<AccountBriefing|null>(null);
+  const [alerts,setAlerts]=useState<AiAlert[]>([]);
+  const [relationship,setRelationship]=useState<RelationshipIntelligence|null>(null);
   const open=deals.filter(d=>d.stage!=="won"&&d.stage!=="lost");
   const pipeline=open.reduce((sum,d)=>sum+d.value,0);
   const filteredContacts=useMemo(()=>contacts.filter(c=>(c.firstName+" "+c.lastName+" "+c.company+" "+c.email).toLowerCase().includes(query.toLowerCase())),[contacts,query]);
@@ -69,10 +75,10 @@ export default function Dashboard(){
     let cancelled=false;
     const run=async()=>{
       try{
-        const [contactsRes,dealsRes,statsRes]=await Promise.all([fetch("/api/v1/contacts"),fetch("/api/v1/deals"),fetch("/api/v1/dashboard")]);
+        const [contactsRes,dealsRes,statsRes,briefingRes,alertsRes]=await Promise.all([fetch("/api/v1/contacts"),fetch("/api/v1/deals"),fetch("/api/v1/dashboard"),fetch("/api/v1/ai/account-briefing"),fetch("/api/v1/ai/alerts")]);
         if(!contactsRes.ok||!dealsRes.ok||!statsRes.ok)throw new Error();
-        const [contactsBody,dealsBody,statsBody]=await Promise.all([contactsRes.json(),dealsRes.json(),statsRes.json()]);
-        if(!cancelled){setContacts(contactsBody.data);setDeals(dealsBody.data);setStats(statsBody.data);}
+        const [contactsBody,dealsBody,statsBody,briefingBody,alertsBody]=await Promise.all([contactsRes.json(),dealsRes.json(),statsRes.json(),briefingRes.json(),alertsRes.json()]);
+        if(!cancelled){setContacts(contactsBody.data);setDeals(dealsBody.data);setStats(statsBody.data);if(briefingRes.ok)setBriefing(briefingBody.data);if(alertsRes.ok)setAlerts(alertsBody.data.alerts);}
       }catch{
         if(!cancelled)setError("We could not load your workspace. Refresh and try again.");
       }finally{
@@ -85,13 +91,21 @@ export default function Dashboard(){
 
   const handleNav=(id:View)=>{setView(id);setSelected(null);setAi(null);setNextAction(null);setError("");};
 
+  async function loadIntelligence(){
+    const [briefingRes,alertsRes]=await Promise.all([fetch("/api/v1/ai/account-briefing"),fetch("/api/v1/ai/alerts")]);
+    if(briefingRes.ok)setBriefing((await briefingRes.json()).data);
+    if(alertsRes.ok)setAlerts((await alertsRes.json()).data.alerts);
+  }
+
   async function openContact(contact:Contact){
-    setSelected(contact);setAi(null);setNextAction(null);setError("");
+    setSelected(contact);setAi(null);setNextAction(null);setRelationship(null);setError("");
     try{
       const res=await fetch("/api/v1/contacts/"+contact.id);
       const body=await res.json();
       if(!res.ok)throw new Error();
       setProfileDeals(body.data.deals);setProfileActivities(body.data.activities);
+      const intelligenceRes=await fetch("/api/v1/ai/relationship-summary",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({contactId:contact.id})});
+      if(intelligenceRes.ok)setRelationship((await intelligenceRes.json()).data.intelligence);
     }catch{setError("Unable to load the relationship timeline.");}
   }
 
@@ -209,6 +223,7 @@ export default function Dashboard(){
       const body=await res.json();
       if(!res.ok)throw new Error();
       setDeals(items=>items.map(d=>d.id===id?body.data:d));
+      void loadIntelligence();
       const refreshed=await fetch("/api/v1/dashboard");
       if(refreshed.ok)setStats((await refreshed.json()).data);
     }catch{setDeals(previous);setError("That deal could not be moved.");}
@@ -249,9 +264,11 @@ export default function Dashboard(){
           <section className="cf-card p-6"><div className="flex items-center justify-between"><div><h2 className="font-bold">Deal pipeline</h2><p className="mt-1 text-sm text-slate-500">{stats.interactions} recorded interactions · drag deals on the board to change stage.</p></div><button onClick={()=>setView("deals")} className="text-sm font-bold text-[#635bff]">Open board <ArrowRight className="ml-1 inline" size={14}/></button></div>
             <div className="mt-5 space-y-3">{deals.slice(0,5).map(d=>{const c=contacts.find(x=>x.id===d.contactId);return <div key={d.id} className="flex items-center justify-between rounded-2xl border border-[#eef0f4] p-4"><div><div className="text-sm font-bold">{d.title}</div><div className="mt-1 text-xs text-slate-500">{c?.company||"Unknown account"}</div></div><div className="text-right"><div className="text-sm font-bold">{money.format(d.value)}</div><div className="mt-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold">{labels[d.stage]}</div></div></div>})}</div>
           </section>
-          <section className="cf-card p-6"><div className="flex items-center gap-3"><div className="flex size-9 items-center justify-center rounded-xl bg-[#efefff] text-[#635bff]"><Bot size={18}/></div><div><h2 className="font-bold">AI attention</h2><p className="text-sm text-slate-500">Deterministic signals, contextual drafting.</p></div></div>
-            <div className="mt-5 rounded-2xl bg-amber-50 p-4"><div className="flex items-center gap-2 text-sm font-bold text-amber-800"><Target size={15}/> {stats.staleDeals} deal{stats.staleDeals===1?"":"s"} need attention</div><p className="mt-1 text-xs leading-5 text-amber-700">Open opportunities with more than a week since their last update.</p></div>
-            {contacts[0]&&<button onClick={()=>generate(contacts[0])} className="mt-3 w-full rounded-2xl bg-slate-50 p-4 text-left hover:bg-slate-100"><div className="flex items-center gap-2 text-sm font-bold"><Sparkles size={15} className="text-[#635bff]"/> Generate next action</div><p className="mt-1 text-xs leading-5 text-slate-500">Draft a follow-up using the first relationship in your workspace.</p></button>}
+          <section className="cf-card p-6"><div className="flex items-center gap-3"><div className="flex size-9 items-center justify-center rounded-xl bg-[#efefff] text-[#635bff]"><Bot size={18}/></div><div><h2 className="font-bold">AI attention</h2><p className="text-sm text-slate-500">Relationship intelligence, proactive triage.</p></div></div>
+            <div className="mt-5 rounded-2xl bg-amber-50 p-4"><div className="flex items-center gap-2 text-sm font-bold text-amber-800"><Target size={15}/> {briefing?.metrics.attentionNeeded??stats.staleDeals} item{(briefing?.metrics.attentionNeeded??stats.staleDeals)===1?"":"s"} need attention</div><p className="mt-1 text-xs leading-5 text-amber-700">{briefing?.overview||"Open opportunities and relationship signals that need action."}</p></div>
+            <div className="mt-3 space-y-2">{alerts.slice(0,3).map(alert=><button key={alert.id} onClick={()=>alert.contact&&void openContact(alert.contact)} className="w-full rounded-2xl border border-[#eef0f4] p-3 text-left hover:bg-slate-50"><div className="flex items-center gap-2 text-xs font-bold"><AlertTriangle size={14} className={alert.severity==="high"?"text-rose-500":"text-amber-500"}/>{alert.title}<span className="ml-auto uppercase text-[10px] text-slate-400">{alert.severity}</span></div><p className="mt-1 text-xs leading-5 text-slate-500">{alert.description}</p></button>)}</div>
+            {briefing?.recommendations[0]&&<div className="mt-3 rounded-2xl bg-slate-50 p-4 text-xs leading-5 text-slate-600"><b>Recommendation:</b> {briefing.recommendations[0]}</div>}
+            {contacts[0]&&<button onClick={()=>generate(contacts[0])} className="mt-3 w-full rounded-2xl bg-slate-50 p-4 text-left hover:bg-slate-100"><div className="flex items-center gap-2 text-sm font-bold"><Sparkles size={15} className="text-[#635bff]"/> Generate contextual follow-up</div><p className="mt-1 text-xs leading-5 text-slate-500">Draft from the relationship context and recent activity.</p></button>}
           </section>
         </div>
       </div>}
@@ -266,7 +283,7 @@ export default function Dashboard(){
 
       {selected&&<div className="fixed inset-0 z-40 overflow-auto bg-black/30 p-4 md:p-8" onClick={()=>setSelected(null)}><div className="mx-auto max-w-5xl" onClick={e=>e.stopPropagation()}><div className="cf-card p-6">
         <div className="flex items-center justify-between"><button onClick={()=>setSelected(null)} className="inline-flex items-center gap-2 text-sm font-bold text-slate-500"><X size={16}/> Close</button><div className="flex gap-2"><button onClick={()=>startEdit(selected)} className="cf-button cf-secondary">Edit</button><button disabled={busy} onClick={()=>void deleteSelected()} className="cf-button rounded-xl bg-rose-50 text-rose-700">Delete</button></div></div>
-        <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_380px]"><div><div className="text-xs font-bold uppercase tracking-wide text-[#635bff]">Relationship profile</div><h2 className="mt-2 text-3xl font-bold">{selected.firstName} {selected.lastName}</h2><p className="mt-1 text-slate-500">{selected.title} · {selected.company} · {selected.email}</p><div className="mt-5 rounded-2xl bg-[#fafaff] p-5"><div className="flex items-center gap-2 text-sm font-bold"><UserRound size={16} className="text-[#635bff]"/> Relationship memory</div><p className="mt-2 text-sm leading-6 text-slate-600">{selected.notes||"No relationship notes recorded yet."}</p></div><div className="mt-5 rounded-2xl border border-[#eef0f4] p-5"><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm font-bold"><Activity size={16}/> Timeline</div><button onClick={startActivityLog} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200"><Plus size={13} className="mr-1 inline"/> Log interaction</button></div>{profileActivities.length===0?<div className="mt-4 text-sm text-slate-500">No interactions recorded yet.</div>:profileActivities.map(item=><div key={item.id} className="mt-4 border-l-2 border-[#e1dfff] pl-4"><div className="text-sm font-bold">{item.title}</div><div className="mt-1 text-xs leading-5 text-slate-500">{item.description}</div><div className="mt-1 text-[11px] text-slate-400">{new Date(item.occurredAt).toLocaleString()}</div></div>)}</div></div>
+        <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_380px]"><div><div className="text-xs font-bold uppercase tracking-wide text-[#635bff]">Relationship profile</div><h2 className="mt-2 text-3xl font-bold">{selected.firstName} {selected.lastName}</h2><p className="mt-1 text-slate-500">{selected.title} · {selected.company} · {selected.email}</p><div className="mt-5 rounded-2xl bg-[#fafaff] p-5"><div className="flex items-center gap-2 text-sm font-bold"><UserRound size={16} className="text-[#635bff]"/> Relationship memory</div><p className="mt-2 text-sm leading-6 text-slate-600">{selected.notes||"No relationship notes recorded yet."}</p></div>{relationship&&<div className="mt-4 rounded-2xl border border-[#eef0f4] p-5"><div className="flex items-center justify-between"><div className="text-sm font-bold">Relationship intelligence</div><div className="text-2xl font-bold text-[#635bff]">{relationship.score}<span className="text-xs text-slate-400">/100</span></div></div><div className="mt-2 flex gap-2 text-xs font-bold"><span className="rounded-full bg-slate-100 px-2 py-1">{relationship.status}</span><span className="rounded-full bg-slate-100 px-2 py-1">{relationship.momentum} momentum</span></div><p className="mt-3 text-sm text-slate-600">{relationship.summary}</p>{relationship.risks.length>0&&<div className="mt-3"><div className="text-xs font-bold uppercase tracking-wide text-slate-400">Risks</div><div className="mt-2 space-y-1 text-xs text-slate-500">{relationship.risks.map(item=><div key={item}>• {item}</div>)}</div></div>}{relationship.nextActions.length>0&&<div className="mt-3"><div className="text-xs font-bold uppercase tracking-wide text-slate-400">Next actions</div><div className="mt-2 space-y-1 text-xs text-slate-500">{relationship.nextActions.map(item=><div key={item}>• {item}</div>)}</div></div>}</div>}<div className="mt-5 rounded-2xl border border-[#eef0f4] p-5"><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm font-bold"><Activity size={16}/> Timeline</div><button onClick={startActivityLog} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200"><Plus size={13} className="mr-1 inline"/> Log interaction</button></div>{profileActivities.length===0?<div className="mt-4 text-sm text-slate-500">No interactions recorded yet.</div>:profileActivities.map(item=><div key={item.id} className="mt-4 border-l-2 border-[#e1dfff] pl-4"><div className="text-sm font-bold">{item.title}</div><div className="mt-1 text-xs leading-5 text-slate-500">{item.description}</div><div className="mt-1 text-[11px] text-slate-400">{new Date(item.occurredAt).toLocaleString()}</div></div>)}</div></div>
           <div>{busy?<div className="rounded-2xl bg-[#fafaff] p-5 text-sm text-slate-500">Working…</div>:ai?<div className="rounded-2xl border border-[#ddd9ff] bg-[#fafaff] p-5"><div className="flex items-center gap-2 font-bold"><Sparkles size={16} className="text-[#635bff]"/> AI follow-up <span className="ml-auto text-xs font-medium text-slate-400">{ai.provider}</span></div><h3 className="mt-4 font-bold">{ai.subject}</h3><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-600">{ai.body}</p><div className="mt-4 text-xs font-bold uppercase tracking-wide text-slate-400">Why this draft</div><div className="mt-2 space-y-2 text-xs text-slate-500">{ai.rationale.map(item=><div key={item}>• {item}</div>)}</div><div className="mt-4 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800"><b>Next action:</b> {ai.nextAction}</div></div>:<div className="space-y-3"><button onClick={()=>void generate(selected)} className="cf-button cf-primary w-full justify-center"><Sparkles size={16}/> Generate contextual follow-up</button>{profileDeals.length>0&&<button onClick={()=>void calculateNextAction()} className="cf-button cf-secondary w-full justify-center"><Target size={16}/> Analyze next best action</button>}{nextAction&&<div className={"rounded-2xl p-4 "+(nextAction.attention?"bg-amber-50":"bg-emerald-50")}><div className={"text-sm font-bold "+(nextAction.attention?"text-amber-800":"text-emerald-800")}>{nextAction.attention?"Attention needed":"Cadence looks healthy"}</div><p className={"mt-2 text-sm "+(nextAction.attention?"text-amber-700":"text-emerald-700")}>{nextAction.recommendation}</p><div className="mt-3 space-y-1 text-xs text-slate-500">{nextAction.evidence.map(item=><div key={item}>• {item}</div>)}</div></div>}</div>}{profileDeals.length>0&&<div className="mt-4 rounded-2xl border border-[#eef0f4] p-4"><div className="text-xs font-bold uppercase tracking-wide text-slate-400">Linked deals</div>{profileDeals.map(d=><div key={d.id} className="mt-3 flex items-center justify-between text-sm"><span className="font-semibold">{d.title}</span><span className="text-slate-500">{money.format(d.value)} · {labels[d.stage]}</span></div>)}</div>}</div>
         </div>
       </div></div></div>}
