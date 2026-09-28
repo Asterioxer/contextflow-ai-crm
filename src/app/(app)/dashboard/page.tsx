@@ -52,6 +52,9 @@ export default function Dashboard(){
   const [briefing,setBriefing]=useState<AccountBriefing|null>(null);
   const [alerts,setAlerts]=useState<AiAlert[]>([]);
   const [relationship,setRelationship]=useState<RelationshipIntelligence|null>(null);
+  const [copilotQuery,setCopilotQuery]=useState("");
+  const [copilot,setCopilot]=useState<{answer:string;intent:string;sources:string[]}|null>(null);
+  const [copilotBusy,setCopilotBusy]=useState(false);
   const open=deals.filter(d=>d.stage!=="won"&&d.stage!=="lost");
   const pipeline=open.reduce((sum,d)=>sum+d.value,0);
   const filteredContacts=useMemo(()=>contacts.filter(c=>(c.firstName+" "+c.lastName+" "+c.company+" "+c.email).toLowerCase().includes(query.toLowerCase())),[contacts,query]);
@@ -90,6 +93,11 @@ export default function Dashboard(){
   },[]);
 
   const handleNav=(id:View)=>{setView(id);setSelected(null);setAi(null);setNextAction(null);setError("");};
+
+  async function askCopilot(event:FormEvent){
+    event.preventDefault(); if(!copilotQuery.trim())return; setCopilotBusy(true);setError("");
+    try{const res=await fetch("/api/v1/ai/copilot",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({query:copilotQuery})});const body=await res.json();if(!res.ok)throw new Error(body?.error?.message||"Copilot unavailable");setCopilot(body.data);}catch(err){setError(err instanceof Error?err.message:"Copilot unavailable.");}finally{setCopilotBusy(false);}
+  }
 
   async function loadIntelligence(){
     const [briefingRes,alertsRes]=await Promise.all([fetch("/api/v1/ai/account-briefing"),fetch("/api/v1/ai/alerts")]);
@@ -260,7 +268,7 @@ export default function Dashboard(){
             ["Pipeline",money.format(pipeline),"Open opportunity value"]
           ].map(([label,value,hint])=><div className="cf-card p-5" key={label}><div className="text-xs font-bold uppercase tracking-wide text-slate-400">{label}</div><div className="mt-3 text-3xl font-bold">{value}</div><div className="mt-2 text-xs text-slate-500">{hint}</div></div>)}
         </div>
-        <div className="mt-6 grid gap-6 xl:grid-cols-[1.35fr_1fr]">
+        <section className="cf-card mt-6 p-6"><div className="flex items-center gap-3"><div className="flex size-9 items-center justify-center rounded-xl bg-[#efefff] text-[#635bff]"><Bot size={18}/></div><div><h2 className="font-bold">ContextFlow Copilot</h2><p className="text-sm text-slate-500">Ask questions against your CRM data. Answers are deterministic and evidence-backed.</p></div></div><form onSubmit={askCopilot} className="mt-4 flex flex-col gap-2 sm:flex-row"><input value={copilotQuery} onChange={e=>setCopilotQuery(e.target.value)} className="cf-input flex-1" placeholder="e.g. Which relationships need attention?" maxLength={500}/><button disabled={copilotBusy} className="cf-button cf-primary">{copilotBusy?"Thinking…":"Ask Copilot"}</button></form><div className="mt-3 flex flex-wrap gap-2">{["Who needs attention?","What is my pipeline?","What should I do next?"].map(q=><button type="button" key={q} onClick={()=>setCopilotQuery(q)} className="rounded-full bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100">{q}</button>)}</div>{copilot&&<div className="mt-5 rounded-2xl border border-[#ddd9ff] bg-[#fafaff] p-5"><div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-[#635bff]">{copilot.intent} <span className="text-slate-300">·</span> grounded answer</div><p className="mt-3 text-sm leading-6 text-slate-700">{copilot.answer}</p><div className="mt-3 flex flex-wrap gap-2">{copilot.sources.map(source=><span key={source} className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500">{source}</span>)}</div></div>}</section><div className="mt-6 grid gap-6 xl:grid-cols-[1.35fr_1fr]">
           <section className="cf-card p-6"><div className="flex items-center justify-between"><div><h2 className="font-bold">Deal pipeline</h2><p className="mt-1 text-sm text-slate-500">{stats.interactions} recorded interactions · drag deals on the board to change stage.</p></div><button onClick={()=>setView("deals")} className="text-sm font-bold text-[#635bff]">Open board <ArrowRight className="ml-1 inline" size={14}/></button></div>
             <div className="mt-5 space-y-3">{deals.slice(0,5).map(d=>{const c=contacts.find(x=>x.id===d.contactId);return <div key={d.id} className="flex items-center justify-between rounded-2xl border border-[#eef0f4] p-4"><div><div className="text-sm font-bold">{d.title}</div><div className="mt-1 text-xs text-slate-500">{c?.company||"Unknown account"}</div></div><div className="text-right"><div className="text-sm font-bold">{money.format(d.value)}</div><div className="mt-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold">{labels[d.stage]}</div></div></div>})}</div>
           </section>

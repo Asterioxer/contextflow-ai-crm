@@ -24,6 +24,9 @@ ContextFlow is an AI-native mini CRM that turns relationship context into explai
   - attention-needed relationships
   - prioritized relationship triage
   - evidence-based account recommendations
+- Proactive AI alerts for stale relationships, low-health deals and qualified milestones
+- Grounded CRM Copilot for pipeline, priority, action and contact questions
+- Dashboard integration of relationship scores, triage and Copilot answers
 
 ## Architecture
 
@@ -34,6 +37,8 @@ Browser
           -> Supabase Auth + PostgreSQL
           -> Relationship Intelligence
           -> Account Briefing / Triage
+          -> Proactive Alerts
+          -> Grounded CRM Copilot
           -> Gemini API (server-side, optional)
 ```
 
@@ -49,6 +54,8 @@ Browser
 - `POST /api/v1/ai/next-action`
 - `POST /api/v1/ai/relationship-summary`
 - `GET /api/v1/ai/account-briefing`
+- `GET /api/v1/ai/alerts`
+- `POST /api/v1/ai/copilot`
 
 The account briefing is deterministic and explainable; it does not pretend that an opaque model prediction is a fact.
 

@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Phase 9 — Grounded CRM Copilot
+
+- Added deterministic CRM Copilot for pipeline, priority, action and contact questions.
+- Added authenticated `POST /api/v1/ai/copilot` with bounded input validation.
+- Added evidence/source labels so answers expose which CRM signals were used.
+- Integrated Copilot into the main dashboard with guided prompts.
+
+### Phase 8 — AI Dashboard Intelligence
+
+- Added proactive alerts for stale relationships, low-health deals and qualified opportunities needing milestones.
+- Added authenticated `GET /api/v1/ai/alerts`.
+- Integrated account briefing and alert triage into the dashboard.
+- Added relationship intelligence to contact profiles.
+
+
 ### Phase 6 — AI Relationship Intelligence
 
 - Added a deterministic relationship-intelligence engine.
